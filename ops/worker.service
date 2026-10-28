@@ -1,0 +1,17 @@
+[Unit]
+Description=Regulatory document email agent
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Desktop/senpilot-agent
+EnvironmentFile=%h/Desktop/senpilot-agent/.env
+Environment=PLAYWRIGHT_BROWSERS_PATH=%h/Desktop/senpilot-agent/var/browsers
+ExecStart=%h/Desktop/senpilot-agent/.venv/bin/python -m senpilot_agent run
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=650
+UMask=0077
+
+[Install]
+WantedBy=default.target
