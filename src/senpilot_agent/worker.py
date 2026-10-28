@@ -34,7 +34,7 @@ class JobWorker:
         self.store.recover_interrupted()
         for job in self.store.jobs(JobState.SENDING):
             try:
-                sent = self.gmail.find_sent_message(job.outbound_id)
+                sent = self.gmail.find_sent_message(job.outbound_id, job.gmail_id)
             except Exception:
                 sent = None
             if sent:

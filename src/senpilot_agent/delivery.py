@@ -98,11 +98,13 @@ def compose_reply(
     subject = re.sub(r"[\r\n]+", " ", incoming.subject)[:500]
     message["Subject"] = "Re: " + re.sub(r"^(Re:\s*)+", "", subject, flags=re.I)
     message["Message-ID"] = outbound_id
+    message["X-Senpilot-Delivery-ID"] = outbound_id
     message["Date"] = format_datetime(utc_now())
     message["Auto-Submitted"] = "auto-replied"
-    if re.fullmatch(r"<[^<>\s]+@[^<>\s]+>", incoming.message_id):
-        message["In-Reply-To"] = incoming.message_id
-        message["References"] = incoming.message_id
+    reference = incoming.message_id.strip()
+    if re.fullmatch(r"<[^<>\s]+@[^<>\s]+>", reference):
+        message["In-Reply-To"] = reference
+        message["References"] = reference
     message.set_content(body)
     if package and package.zip_path:
         message.add_attachment(

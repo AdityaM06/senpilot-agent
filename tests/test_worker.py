@@ -26,7 +26,7 @@ def worker_setup(tmp_path, *, automated=False):
         return "sent-id"
 
     gmail = SimpleNamespace(
-        fetch_email=lambda _: incoming, send=send, find_sent_message=lambda _: None
+        fetch_email=lambda _: incoming, send=send, find_sent_message=lambda *_: None
     )
     parser = SimpleNamespace(
         parse=lambda _: ParseResult(
@@ -88,7 +88,12 @@ def test_restart_can_reconcile_an_accepted_email(tmp_path):
     store.claim_next_job()
     store.begin_send("incoming", "<outbound@example.com>")
 
-    worker.gmail.find_sent_message = lambda _: "sent-id"
+    def find_sent(outbound_id, incoming_id):
+        assert outbound_id == "<outbound@example.com>"
+        assert incoming_id == "incoming"
+        return "sent-id"
+
+    worker.gmail.find_sent_message = find_sent
     worker.recover()
     assert store.jobs()[0].state == JobState.REPLIED
     assert sent == []

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -84,7 +85,7 @@ def decode_email(message_id: str, payload: dict) -> InboundEmail:
     return InboundEmail(
         gmail_id=message_id,
         thread_id=payload.get("threadId", ""),
-        message_id=str(message.get("Message-ID", "")),
+        message_id=str(message.get("Message-ID", "")).strip(),
         sender=senders[0][1],
         subject=str(message.get("Subject", "")),
         text=text[:50_000],
@@ -97,7 +98,20 @@ def authorize(client_file: Path, token_file: Path, expected_email: str) -> None:
     if not expected_email:
         raise ValueError("Set AGENT_EMAIL before authorizing Gmail")
     flow = InstalledAppFlow.from_client_secrets_file(str(client_file), SCOPES)
-    credentials = flow.run_local_server(port=0, access_type="offline", prompt="consent")
+    # The library logs callback URLs, including the one-time OAuth code, at INFO.
+    flow_logger = logging.getLogger("google_auth_oauthlib.flow")
+    previous_level = flow_logger.level
+    flow_logger.setLevel(logging.WARNING)
+    try:
+        credentials = flow.run_local_server(
+            port=0,
+            access_type="offline",
+            prompt="consent",
+            timeout_seconds=300,
+            authorization_prompt_message="Complete Gmail authorization in the browser window.",
+        )
+    finally:
+        flow_logger.setLevel(previous_level)
     service = build("gmail", "v1", credentials=credentials, cache_discovery=False)
     actual = service.users().getProfile(userId="me").execute(num_retries=2)["emailAddress"]
     if actual.casefold() != expected_email.casefold():
@@ -209,7 +223,7 @@ class GmailClient:
             .execute(num_retries=2)
         )
 
-    def find_sent_message(self, outbound_id: str) -> str | None:
+    def find_sent_message(self, outbound_id: str, incoming_id: str | None = None) -> str | None:
         data = (
             self.service.users()
             .messages()
@@ -217,7 +231,44 @@ class GmailClient:
             .execute(num_retries=2)
         )
         messages = data.get("messages", [])
-        return messages[0]["id"] if messages else None
+        if messages:
+            return messages[0]["id"]
+        if not incoming_id:
+            return None
+        # Gmail can replace the RFC Message-ID. Match our own marker inside the
+        # original request's thread, requiring SENT so inbound headers cannot match.
+        try:
+            incoming = (
+                self.service.users()
+                .messages()
+                .get(userId="me", id=incoming_id, format="minimal")
+                .execute(num_retries=2)
+            )
+            thread = (
+                self.service.users()
+                .threads()
+                .get(
+                    userId="me",
+                    id=incoming["threadId"],
+                    format="metadata",
+                    metadataHeaders=["X-Senpilot-Delivery-ID"],
+                )
+                .execute(num_retries=2)
+            )
+        except HttpError as exc:
+            if exc.resp.status == 404:
+                return None
+            raise
+        for message in thread.get("messages", []):
+            if "SENT" not in message.get("labelIds", []):
+                continue
+            for header in message.get("payload", {}).get("headers", []):
+                if (
+                    header["name"].casefold() == "x-senpilot-delivery-id"
+                    and header["value"].strip() == outbound_id
+                ):
+                    return message["id"]
+        return None
 
     def send(self, message: EmailMessage, thread_id: str) -> str:
         body = {"raw": base64.urlsafe_b64encode(message.as_bytes()).decode("ascii")}

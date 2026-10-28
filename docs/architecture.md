@@ -53,7 +53,10 @@ queued -> running -> sending -> replied
 
 An interrupted `running` job can be restarted within its retry allowance. Retrieval
 starts afresh. A `sending` job is reconciled against Sent mail using its saved RFC
-message ID. An absent or uncertain result is flagged for inspection; external email
+message ID, then its `X-Senpilot-Delivery-ID` marker in the original request's
+thread if Gmail replaced that ID. Only messages with the SENT label can match the
+marker; the fallback reads thread headers rather than message bodies. An absent
+or uncertain result is flagged for inspection; external email
 sending is not part of a SQLite transaction and exactly-once delivery is not claimed.
 
 ## Data boundaries

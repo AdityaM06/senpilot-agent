@@ -109,6 +109,16 @@ def test_malformed_incoming_headers_cannot_inject_reply_headers():
     assert message["To"] == "user@example.com"
 
 
+def test_reply_preserves_valid_reference_with_outer_whitespace():
+    incoming = InboundEmail(
+        gmail_id="a", sender="user@example.com", message_id=" \t<outlook@example.com> "
+    )
+    message = compose_reply(incoming, "agent@example.com", "<delivery@example.com>", "Reply")
+    assert message["In-Reply-To"] == "<outlook@example.com>"
+    assert message["References"] == "<outlook@example.com>"
+    assert message["X-Senpilot-Delivery-ID"] == "<delivery@example.com>"
+
+
 def test_attachment_subset_fits_after_mime_encoding(tmp_path):
     result = example_result(tmp_path)
     first = result.files[0]

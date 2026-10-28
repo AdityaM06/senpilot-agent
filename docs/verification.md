@@ -5,14 +5,15 @@ remain outstanding. No Git commits existed when these checks were performed.
 
 ## Automated checks
 
-- Local Python 3.12: 37 unit/integration tests passed after adding the Vertex AI
+- Local Python 3.12: 43 unit/integration tests passed after adding the Vertex AI
   parser; three opt-in live cases skipped. The new checks cover malformed output,
   invented identifiers, Cloud identity configuration, and real SDK serialization
-  against a simulated HTTP transport. These simulated checks do not establish
-  real model access.
+  against a simulated HTTP transport. An OAuth logging regression check also
+  verifies callback codes do not enter INFO logs. These simulated checks do not
+  establish real model access.
 - Ruff checks passed for source, tests and evaluation scripts.
 - Linux `cs136`: the earlier 29-test suite passed, with three opt-in live cases skipped.
-- GCP Ubuntu 24.04 VM: all 37 routine tests passed, plus Ruff, dependency checks,
+- GCP Ubuntu 24.04 VM: all 43 routine tests passed, plus Ruff, dependency checks,
   and systemd service-template validation.
 - Four state-store tests passed with their temporary state placed inside the
   project's `var/verification/state-tests` directory on the server's Ceph storage.
@@ -90,9 +91,37 @@ retained privately at `var/deployment/gemini-eval.json` locally and
   service started automatically afterward, active with zero restarts. Mailbox
   synchronization resumed against the persisted checkpoint after boot.
 
+## Live email-to-ZIP check
+
+- A fresh request from a separate Outlook mailbox was picked up by the running
+  service and interpreted through Vertex AI. The persisted job completed on its
+  first attempt without a processing error. Gmail accepted the reply 65 seconds
+  after accepting the incoming email.
+- The actual Sent copy was retrieved for inspection. Its sole recipient matched
+  the original sender. The attached ZIP was 5,570,862 bytes and contained ten PDFs
+  plus `manifest.json`. ZIP CRC, all ten PDF signatures, file sizes, and SHA-256
+  values passed. No download failures, budget omissions, or inventory errors were
+  reported. Counts were 13 Exhibits, 6 Key Documents, 43 Other Documents, and zero
+  Transcripts/Recordings, with 56 unique source identifiers.
+- The live request exposed leading whitespace in Outlook's Message-ID. It caused
+  the first reply's RFC reference headers to be omitted, although Gmail kept the
+  reply in the original thread. Input normalization and reply reference validation
+  now trim outer whitespace while still rejecting malformed IDs.
+- Gmail also replaced our supplied outgoing RFC Message-ID. Recovery now has a
+  second lookup using a unique `X-Senpilot-Delivery-ID` header in the original
+  request's thread, requiring the SENT label. Three regression cases verify that
+  incoming or unrelated markers do not count as successful delivery.
+- A single automated self-email verified that Gmail preserves the delivery marker
+  and normalized reference header. Its RFC Message-ID was rewritten, and the live
+  reconciliation lookup still found the Sent message. No new documents were
+  requested by this automated check.
+- Private local review artifacts are under `var/verification/email-test/` and
+  include the actual reply ZIP, reply text, and a sanitized verification report.
+- The requester confirmed receipt in the originating mailbox and successfully
+  opened the ZIP attachment, completing the recipient-side check.
+
 ## Outstanding before submission
 
-- Verify a fresh email-to-ZIP exchange and recipient-side receipt.
 - Check nonempty Transcript and Recording tabs when suitable test matters are available.
 - Reauthorize the Testing mailbox on October 30 for the evaluation window.
   Validate subsequent watch renewal in the deployed environment. The school host
